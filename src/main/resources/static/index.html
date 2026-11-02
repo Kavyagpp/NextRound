@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>NextRound</title>
+  <style>
+    body { font-family: Arial, sans-serif; max-width: 900px; margin: 30px auto; padding: 0 12px; }
+    input, select, button { padding: 8px; margin: 4px 4px 4px 0; }
+    table { width: 100%; border-collapse: collapse; margin-top: 16px; }
+    th, td { border-bottom: 1px solid #ddd; padding: 8px; text-align: left; }
+    .due { background: #fff3cd; }
+    #stats { color: #555; }
+  </style>
+</head>
+<body>
+  <h2>NextRound</h2>
+  <p>Every application is a step toward the next round.</p>
+
+  <div>
+    <input id="company" placeholder="Company">
+    <input id="role" placeholder="Role">
+    <button onclick="add()">Add</button>
+  </div>
+
+  <p id="stats"></p>
+
+  <table>
+    <thead>
+      <tr><th>Company</th><th>Role</th><th>Status</th><th>Follow-up</th><th></th></tr>
+    </thead>
+    <tbody id="rows"></tbody>
+  </table>
+
+<script>
+const API = '/api/applications';
+const STATUSES = ['APPLIED', 'TEST', 'INTERVIEW', 'OFFER', 'REJECTED'];
+let apps = [];
+
+async function load() {
+  apps = await (await fetch(API)).json();
+  const stats = await (await fetch(API + '/stats')).json();
+  document.getElementById('stats').textContent =
+    Object.entries(stats).map(([k, v]) => k + ': ' + v).join('  |  ');
+
+  const today = new Date().toISOString().slice(0, 10);
+  const tbody = document.getElementById('rows');
+  tbody.innerHTML = '';
+
+  apps.forEach(a => {
+    const tr = document.createElement('tr');
+    if (a.status === 'APPLIED' && a.followUpOn <= today) tr.className = 'due';
+
+    [a.company, a.role].forEach(text => {
+      const td = document.createElement('td');
+      td.textContent = text;
+      tr.appendChild(td);
+    });
+
+    const statusTd = document.createElement('td');
+    const select = document.createElement('select');
+    STATUSES.forEach(s => {
+      const opt = document.createElement('option');
+      opt.value = s;
+      opt.textContent = s;
+      if (s === a.status) opt.selected = true;
+      select.appendChild(opt);
+    });
+    select.onchange = () => changeStatus(a.id, select.value);
+    statusTd.appendChild(select);
+    tr.appendChild(statusTd);
+
+    const followTd = document.createElement('td');
+    followTd.textContent = a.followUpOn;
+    tr.appendChild(followTd);
+
+    const delTd = document.createElement('td');
+    const btn = document.createElement('button');
+    btn.textContent = 'Delete';
+    btn.onclick = () => remove(a.id);
+    delTd.appendChild(btn);
+    tr.appendChild(delTd);
+
+    tbody.appendChild(tr);
+  });
+}
+
+async function add() {
+  const company = document.getElementById('company').value.trim();
+  const role = document.getElementById('role').value.trim();
+  if (!company || !role) { alert('Enter company and role'); return; }
+  await fetch(API, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ company, role })
+  });
+  document.getElementById('company').value = '';
+  document.getElementById('role').value = '';
+  load();
+}
+
+async function changeStatus(id, status) {
+  const a = apps.find(x => x.id === id);
+  a.status = status;
+  await fetch(API + '/' + id, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(a)
+  });
+  load();
+}
+
+async function remove(id) {
+  await fetch(API + '/' + id, { method: 'DELETE' });
+  load();
+}
+
+load();
+</script>
+</body>
+</html>
